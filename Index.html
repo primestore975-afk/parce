@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parcel Manager</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{
+  --ink:#10243e;--mute:#5b6b7f;--line:#dde4ec;--bg:#eef2f6;--card:#fff;
+  --dispatched:#2563eb;--transit:#d97706;--delivered:#15803d;--returned:#dc2626;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.4}
+.top{background:var(--ink);color:#fff;padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+.top h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.2px}
+.top a{color:#bcd3f5;text-decoration:none;font-size:14px;border:1px solid #3b5576;padding:6px 12px;border-radius:8px}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+.card{background:var(--card);border-radius:14px;padding:16px;margin-bottom:14px;border:1px solid var(--line)}
+h2{margin:0 0 10px;font-size:15px;font-weight:600;color:var(--mute)}
+input,select{padding:11px 12px;font-size:16px;border:1px solid var(--line);border-radius:10px;width:100%;background:#fff;color:var(--ink)}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--dispatched);outline-offset:1px}
+.hidden{display:none}
+
+/* dashboard */
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-bottom:14px}
+.hero{background:var(--ink);color:#fff;border-radius:16px;padding:20px;margin-bottom:14px}
+.hero .cap{font-size:14px;color:#9fb4d0;margin-bottom:12px}
+.hero .nums{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.hero .num span{display:block;font-size:14px;color:#9fb4d0}
+.hero .num b{display:block;font-size:clamp(40px,10vw,64px);line-height:1.05;font-weight:700}
+.hero .num.d b{color:#8bb4ff}
+.hero .num.r b{color:#ff9d9d}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}
+.kpi small{display:flex;align-items:center;gap:8px;color:var(--mute);font-size:14px}
+.kpi i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.kpi b{display:block;font-size:30px;margin-top:6px}
+.split{display:flex;height:22px;border-radius:11px;overflow:hidden;background:#e8edf3}
+.split div{height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;font-size:13px;color:var(--mute)}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:520px}
+th{background:#f6f8fb;color:var(--mute);text-align:left;padding:10px;font-weight:600;border-bottom:1px solid var(--line);position:sticky;top:0}
+td{padding:11px 10px;border-bottom:1px solid #edf1f5}
+tr:last-child td{border-bottom:0}
+.pill{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+.empty{padding:22px;text-align:center;color:var(--mute)}
+.upd{color:var(--mute);font-size:12px;text-align:right;margin-top:8px}
+
+/* scanner */
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:8px 0 12px}
+.seg button{padding:18px 6px;font-size:17px;font-weight:600;border:0;border-radius:12px;color:#fff}
+#reader{width:100%;border-radius:12px;overflow:hidden;background:#000;min-height:180px;margin-top:10px}
+#toast{margin-top:10px;padding:14px;border-radius:12px;font-size:17px;font-weight:600;text-align:center;background:#e8edf3;color:var(--mute)}
+#toast.ok{background:#dcfce7;color:#14532d}
+#toast.err{background:#fee2e2;color:#7f1d1d}
+.step{margin:14px 0 4px;font-weight:600}
+.ghost{width:100%;padding:13px;font-size:15px;border:1px solid #c5d0dd;border-radius:12px;background:#fff;color:var(--ink)}
+.rec{font-size:14px;padding:9px 0;border-bottom:1px solid #edf1f5;display:flex;justify-content:space-between;gap:8px}
+</style>
+</head>
+<body>
+
+<!-- ================= DASHBOARD ================= -->
+<div id="pageDashboard" class="hidden">
+<div class="top"><h1>Parcel Dashboard</h1><a href="?page=scanner">Open scanner</a></div>
+<div class="wrap">
+  <div class="filters">
+    <select id="view" onchange="load()">
+      <option value="daily">Daily scans (pick a date)</option>
+      <option value="current">Current status of all parcels</option>
+    </select>
+    <input type="date" id="date" onchange="load()">
+    <select id="fstatus" onchange="render()">
+      <option value="">All statuses</option>
+      <option>Dispatched</option><option>In Transit</option>
+      <option>Delivered</option><option>Returned</option>
+    </select>
+    <input id="search" placeholder="Search tracking ID or worker" oninput="render()">
+  </div>
+
+  <div class="hero" id="hero"></div>
+
+  <h2 id="kpiTitle"></h2>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="card">
+    <h2>Status split</h2>
+    <div id="split"></div>
+  </div>
+
+  <div class="card">
+    <h2 id="tblTitle">Parcels</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Tracking ID</th><th>Status</th><th>Worker</th><th>Date</th><th>Time</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <div class="upd" id="upd"></div>
+  </div>
+</div>
+</div>
+
+<!-- ================= SCANNER ================= -->
+<div id="pageScanner" class="hidden">
+<div class="top"><h1>Parcel Scanner</h1><a href="?page=dashboard">Open dashboard</a></div>
+<div class="wrap">
+  <div class="card">
+    <input id="worker" placeholder="Your name">
+    <div id="reader"></div>
+    <div id="toast">Step 1: Scan the parcel barcode</div>
+    <input id="tid" placeholder="Tracking ID (fills automatically, or type)" style="margin-top:10px">
+    <div class="step">Step 2: Choose status</div>
+    <div class="seg" id="seg"></div>
+    <button class="ghost" onclick="resetScan()">Clear and scan next</button>
+    <div class="step">Camera na chale to barcode ki photo lein:</div>
+    <input type="file" id="filescan" accept="image/*" capture="environment">
+  </div>
+  <div class="card"><h2>My scans in this session</h2><div id="recent"></div></div>
+</div>
+</div>
+
+<script>
+// ====== SETTINGS: sirf yeh ek line badlein ======
+// Apps Script ka "Web app URL" (jo /exec par khatam hota hai) yahan paste karein.
+var API_URL = 'https://script.google.com/macros/s/AKfycbzBnibjbr8kUq4-RsyIx9qNkO1em92XgMn91RdKD9nhos8iBfio4Vnl0blXdw1ULL37DA/exec';
+// ================================================
+
+var C={'Dispatched':'#2563eb','In Transit':'#d97706','Delivered':'#15803d','Returned':'#dc2626'};
+var KEYS=Object.keys(C);
+function el(i){return document.getElementById(i);}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+function getPin(){
+  var p='';
+  try{p=localStorage.getItem('pin')||'';}catch(e){}
+  if(!p){
+    p=prompt('PIN dalein') || '';
+    try{localStorage.setItem('pin',p);}catch(e){}
+  }
+  return p;
+}
+
+// google.script.run ki jagah: fetch se Apps Script ko call
+function api(action,params){
+  params=params||{};
+  params.action=action;
+  params.pin=getPin();
+  var qs=Object.keys(params).map(function(k){
+    return encodeURIComponent(k)+'='+encodeURIComponent(params[k]==null?'':params[k]);
+  }).join('&');
+  return fetch(API_URL+'?'+qs).then(function(r){return r.json();}).then(function(j){
+    if(j&&j.error){
+      if(j.error==='bad pin'){try{localStorage.removeItem('pin');}catch(e){}}
+      throw new Error(j.error==='bad pin'?'Galat PIN, dobara koshish karein':j.error);
+    }
+    return j;
+  });
+}
+
+var page=new URLSearchParams(location.search).get('page')||'scanner';
+if(page==='dashboard'){el('pageDashboard').className='';initDashboard();}
+else{el('pageScanner').className='';initScanner();}
+
+/* ================= DASHBOARD ================= */
+function initDashboard(){
+  var data={list:[],counts:{}};
+  var dayCounts={};
+  function ymd(){var n=new Date();return n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2)+'-'+('0'+n.getDate()).slice(-2);}
+  el('date').value=ymd();
+
+  window.load=function(){
+    var date=el('date').value, view=el('view').value;
+    api('dashboard',{date:date,view:view}).then(function(d){
+      data=d;
+      if(view==='daily'){dayCounts=d.counts||{};}
+      render();
+      el('upd').innerText='Updated '+new Date().toLocaleTimeString();
+    }).catch(function(e){el('upd').innerText='Error: '+e.message;});
+    if(view!=='daily'){
+      api('dashboard',{date:date,view:'daily'}).then(function(t){
+        dayCounts=t.counts||{};
+        renderHero();
+      }).catch(function(){});
+    }
+  };
+
+  function renderHero(){
+    el('hero').innerHTML=
+      '<div class="cap">Daily report for '+esc(el('date').value)+'</div>'+
+      '<div class="nums">'+
+      '<div class="num d"><span>Dispatched</span><b>'+(dayCounts['Dispatched']||0)+'</b></div>'+
+      '<div class="num r"><span>Returned</span><b>'+(dayCounts['Returned']||0)+'</b></div>'+
+      '</div>';
+  }
+
+  window.render=function(){
+    renderHero();
+    var daily=el('view').value==='daily';
+    var fs=el('fstatus').value;
+    var q=el('search').value.toLowerCase();
+    var counts=data.counts||{};
+    var total=0;
+    KEYS.forEach(function(k){total+=counts[k]||0;});
+
+    el('kpiTitle').innerText=daily?('Scans on '+el('date').value):'Parcels right now, by status';
+    el('tblTitle').innerText=daily?'All scans on this date':'All parcels and their current status';
+
+    el('kpis').innerHTML=KEYS.map(function(k){
+      return '<div class="kpi"><small><i style="background:'+C[k]+'"></i>'+k+'</small><b>'+(counts[k]||0)+'</b></div>';
+    }).join('');
+
+    if(total===0){
+      el('split').innerHTML='<div class="empty">Nothing to show yet.</div>';
+    }else{
+      el('split').innerHTML=
+        '<div class="split">'+KEYS.map(function(k){
+          var n=counts[k]||0;
+          return n?'<div title="'+k+': '+n+'" style="width:'+(n/total*100)+'%;background:'+C[k]+'"></div>':'';
+        }).join('')+'</div>'+
+        '<div class="legend">'+KEYS.map(function(k){
+          var n=counts[k]||0;
+          return '<span><i style="background:'+C[k]+'"></i>'+k+' '+n+' ('+Math.round(n/total*100)+'%)</span>';
+        }).join('')+'</div>';
+    }
+
+    var rows=(data.list||[]).filter(function(r){
+      return (!fs||r.status===fs)&&(r.id+' '+r.worker).toLowerCase().indexOf(q)>-1;
+    });
+    el('rows').innerHTML=rows.length?rows.map(function(r){
+      var c=C[r.status]||'#5b6b7f';
+      return '<tr><td><b>'+esc(r.id)+'</b></td>'+
+        '<td><span class="pill" style="background:'+c+'1a;color:'+c+'">'+esc(r.status)+'</span></td>'+
+        '<td>'+esc(r.worker)+'</td><td>'+esc(r.date)+'</td><td>'+esc(r.time)+'</td></tr>';
+    }).join(''):'<tr><td colspan="5" class="empty">No parcels match. Pick another date or scan a parcel.</td></tr>';
+  };
+
+  load();
+  setInterval(load,10000);
+}
+
+/* ================= SCANNER ================= */
+function initScanner(){
+  var recent=[],busy=false;
+  var w=el('worker');
+  try{w.value=localStorage.getItem('worker')||'';}catch(e){}
+  w.onchange=function(){try{localStorage.setItem('worker',w.value);}catch(e){}};
+
+  el('seg').innerHTML=KEYS.map(function(k){
+    return '<button style="background:'+C[k]+'" onclick="choose(\''+k+'\')">'+k+'</button>';
+  }).join('');
+
+  function toast(t,c){var e=el('toast');e.innerText=t;e.className=c||'';}
+  function beep(){
+    try{
+      var a=new (window.AudioContext||window.webkitAudioContext)();
+      var o=a.createOscillator();o.frequency.value=900;o.connect(a.destination);
+      o.start();setTimeout(function(){o.stop();},150);
+    }catch(e){}
+  }
+
+  // Step 1: barcode scanned -> ID fills automatically, camera pauses.
+  function onScan(text){
+    var id=String(text).trim();
+    if(!id||busy)return;
+    busy=true;
+    el('tid').value=id;
+    try{qr.pause(true);}catch(e){}
+    beep();if(navigator.vibrate)navigator.vibrate(100);
+    toast('Scanned: '+id+' ... checking');
+    api('lookup',{id:id}).then(function(r){
+      var s=r.status;
+      toast(s?('Scanned: '+id+' | Current status: '+s+'. Choose the new status below.'):('Scanned: '+id+' | New parcel. Choose status below.'),'ok');
+    }).catch(function(){
+      toast('Scanned: '+id+'. Choose status below.','ok');
+    });
+  }
+
+  // Step 2: status chosen -> existing parcel is updated, new parcel is added.
+  window.choose=function(st){
+    var id=el('tid').value.trim();
+    if(!id){toast('Scan or type a tracking ID first','err');return;}
+    toast('Saving ...');
+    api('save',{id:id,status:st,worker:w.value}).then(function(res){
+      toast(res.note+': '+id+' - '+st,'ok');
+      beep();if(navigator.vibrate)navigator.vibrate(200);
+      recent.unshift({id:id,st:st,t:new Date().toLocaleTimeString()});
+      el('recent').innerHTML=recent.slice(0,10).map(function(r){
+        return '<div class="rec"><span>'+esc(r.id)+'</span><span style="color:'+C[r.st]+';font-weight:600">'+r.st+'</span><span>'+r.t+'</span></div>';
+      }).join('');
+      resetScan(true);
+    }).catch(function(e){
+      toast('Error: '+e.message,'err');
+    });
+  };
+
+  window.resetScan=function(keepToast){
+    el('tid').value='';
+    busy=false;
+    try{qr.resume();}catch(e){}
+    if(!keepToast)toast('Step 1: Scan the parcel barcode');
+  };
+
+  var qr=new Html5Qrcode('reader');
+  qr.start({facingMode:'environment'},{fps:10,qrbox:{width:280,height:130}},
+    function(text){onScan(text);},function(){})
+   .catch(function(){toast('Camera not available. Allow camera access, photo se scan karein ya ID type karein.','err');});
+
+  // Fallback: barcode ki photo se scan
+  var fileQr=new Html5Qrcode('reader');
+  el('filescan').addEventListener('change',function(e){
+    if(!e.target.files.length)return;
+    fileQr.scanFile(e.target.files[0],false)
+      .then(function(text){onScan(text);})
+      .catch(function(){toast('Barcode read nahi hua, dobara photo lein ya ID type karein','err');});
+  });
+}
+</script>
+</body>
+</html>
